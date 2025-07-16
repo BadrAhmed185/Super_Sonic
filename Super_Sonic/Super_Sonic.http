@@ -1,0 +1,6 @@
+@Super_Sonic_HostAddress = http://localhost:5108
+
+GET {{Super_Sonic_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
