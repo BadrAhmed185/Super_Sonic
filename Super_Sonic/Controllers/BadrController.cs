@@ -19,5 +19,11 @@ namespace Super_Sonic.Controllers
         {
             return Ok("Badr is ready to be serve 🥰🥰🥰🥰🥰");
         }
+
+                [HttpGet("Mostafa")]
+        public IActionResult AutoTestedAndDeployedAction()
+        {
+            return Ok("No one deployed meeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee ");
+        }
     }
 }
