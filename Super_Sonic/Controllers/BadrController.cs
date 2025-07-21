@@ -25,5 +25,11 @@ namespace Super_Sonic.Controllers
         {
             return Ok("No one deployed meeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee ");
         }
+
+       [HttpGet("Zawy")]
+        public IActionResult PrintZawy()
+        {
+            return Ok("Hello this is Ahmed Abd Elkarem");
+        }
     }
 }
