@@ -19,10 +19,17 @@ namespace Super_Sonic.Controllers
         {
             return Ok("Badr is ready to be serve 🥰🥰🥰🥰🥰");
         }
-        [HttpGet("AutoTest")]
+
+                [HttpGet("AutoTest")]
         public IActionResult AutoTestedAndDeployedAction()
         {
             return Ok("No one deployed meeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee ");
+        }
+
+       [HttpGet("Zawy")]
+        public IActionResult PrintZawy()
+        {
+            return Ok("Hello this is Ahmed Abd Elkarem");
         }
     }
 }
