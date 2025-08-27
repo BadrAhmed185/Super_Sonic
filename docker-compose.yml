@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: super_sonic-sql-local
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=Badr1852003
+    ports:
+      - "14330:1433"            # use 14330 on host to avoid conflicts with local SQL
+    volumes:
+      - mssql_data:/var/opt/mssql
+      - ./backup:/var/opt/mssql/backup  # put super_sonic.bak here
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - sqlserver
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Super_Sonic=Server=sqlserver,1433;Database=Super_Sonic;User Id=sa;Password=Badr1852003;TrustServerCertificate=True;
+      - JWT__ValidIssuer=SuperSonicIssuer
+      - JWT__ValidConsumer=SuperSonicConsumer
+      - JWT__SecretKey=ChangeThisSuperSecretKey_AtLeast32Chars
+    ports:
+      - "5000:80"
+    restart: unless-stopped
+
+volumes:
+  mssql_data:
