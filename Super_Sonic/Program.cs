@@ -107,16 +107,6 @@ namespace Super_Sonic
             //var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
             //builder.WebHost.UseUrls($"http://*:{port}");
 
-            var app = builder.Build();
-
-            // Configure the HTTP request pipeline.
-            //if (app.Environment.IsDevelopment())
-            //{
-            //    app.UseSwagger();
-            //    app.UseSwaggerUI();
-            //}
-
-
 
             // Register CORS
             builder.Services.AddCors(options =>
@@ -128,6 +118,19 @@ namespace Super_Sonic
                           .AllowAnyHeader();
                 });
             });
+
+            var app = builder.Build();
+
+            // Configure the HTTP request pipeline.
+            //if (app.Environment.IsDevelopment())
+            //{
+            //    app.UseSwagger();
+            //    app.UseSwaggerUI();
+            //}
+
+
+
+
             // Always enable Swagger for testing (optional: restrict to development)
             app.UseSwagger();
             app.UseSwaggerUI();
