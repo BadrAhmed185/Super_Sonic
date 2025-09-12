@@ -72,6 +72,28 @@ namespace Super_Sonic
              .AddDefaultTokenProviders();
 
 
+            //builder.Services.AddAuthentication(options =>
+            //{
+            //    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            //    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            //    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+            //})
+            //.AddJwtBearer(options =>
+            //{
+            //    options.SaveToken = true;
+            //    options.RequireHttpsMetadata = false;
+
+            //    options.TokenValidationParameters = new TokenValidationParameters()
+            //    {
+            //        ValidateIssuer = true,
+            //        ValidIssuer = Configuration["JWT:ValidIssuer"],
+            //        ValidateAudience = true,
+            //        ValidAudience = Configuration["JWT:ValidConsumer"],
+            //        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["JWT:SecretKey"]))
+
+            //    };
+            //});      
+            
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -87,8 +109,7 @@ namespace Super_Sonic
                 {
                     ValidateIssuer = true,
                     ValidIssuer = Configuration["JWT:ValidIssuer"],
-                    ValidateAudience = true,
-                    ValidAudience = Configuration["JWT:ValidConsumer"],
+                    ValidateAudience = false,                
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["JWT:SecretKey"]))
 
                 };

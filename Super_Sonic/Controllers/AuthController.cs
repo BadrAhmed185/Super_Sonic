@@ -169,9 +169,16 @@ namespace Super_Sonic.Controllers
                 var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["JWT:SecretKey"]));
                 var signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+                //var tokenRepresentation = new JwtSecurityToken(
+                //    issuer: config["JWT:ValidIssuer"],
+                //    audience: config["JWT:ValidConsumer"],
+                //    claims: claims,
+                //    expires: DateTime.Now.AddHours(1),
+                //    signingCredentials: signingCredentials
+                //); 
+                
                 var tokenRepresentation = new JwtSecurityToken(
                     issuer: config["JWT:ValidIssuer"],
-                    audience: config["JWT:ValidConsumer"],
                     claims: claims,
                     expires: DateTime.Now.AddHours(1),
                     signingCredentials: signingCredentials
