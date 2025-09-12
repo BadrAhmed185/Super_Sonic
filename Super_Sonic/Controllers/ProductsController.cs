@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Super_Sonic.Dtos;
 using Microsoft.EntityFrameworkCore;
-using System.Linq;
+using Super_Sonic.Common;
+using Super_Sonic.Dtos;
 using Super_Sonic.Models;
 
 namespace Super_Sonic.Controllers
@@ -16,203 +16,178 @@ namespace Super_Sonic.Controllers
         public ProductsController(AppDbContext context)
         {
             _context = context;
-
             this.rate = _context.InterestRates
                                  .Select(s => s.Rate)
                                  .FirstOrDefault();
         }
 
+        // ✅ Create Product
         [HttpPost]
         public async Task<IActionResult> CreateProduct([FromBody] ProductCreateDto dto)
         {
-
-
             if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+                return BadRequest(ServiceResult<string>.Failure("⚠ البيانات المدخلة غير صالحة."));
 
             if (dto.Cost <= 0 || dto.CashPrice <= 0 || dto.CashPaid < 0)
-                return BadRequest(new { message = "⚠ القيم المالية يجب أن تكون موجبة." });
+                return BadRequest(ServiceResult<string>.Failure("⚠ القيم المالية يجب أن تكون موجبة."));
 
-            var toTalCash = await _context.Partners.SumAsync(p => (decimal?)p.Cash) ?? 0m;
-            if (toTalCash <= 0)
-                return BadRequest(new { message = "⚠ لا يوجد رصيد كافي أو لا يوجد شركاء." });
-
-            if (dto.Cost >= toTalCash)
-                return BadRequest(new { message = "عذرآ, الرصيد غير كافي" });
-
-            var clientExists = await _context.Clients.AnyAsync(c => c.NationalId == dto.ClientId);
-            if (!clientExists)
-                return BadRequest(new { message = "⚠ العميل غير موجود." });
-
-            //var validPartners = await _context.Partners
-            //    .Where(p => p.Cash >= 500)
-            //    .ToListAsync(); 
-
-            var validPartners = await _context.Partners
-                .ToListAsync();
-
-            if (!validPartners.Any())
-                return BadRequest(new { message = "⚠ لا يوجد شركاء مؤهلين." });
-
-            using var transactionScope = await _context.Database.BeginTransactionAsync();
             try
             {
-                //Memory variables that we will need in the try 
-                var transactions = new List<Transaction>();
-                var PartnersOfProduct = new List<PartnerProduct>();
-                var subTransactionsOfProduct = new List<SubTransaction>();
-                var totalPercentage = 0m;
-                var totalCost = 0m;
+                var toTalCash = await _context.Partners.SumAsync(p => (decimal?)p.Cash) ?? 0m;
+                if (toTalCash <= 0)
+                    return BadRequest(ServiceResult<string>.Failure("⚠ لا يوجد رصيد كافي أو لا يوجد شركاء."));
 
-                var product = new Product
+                if (dto.Cost >= toTalCash)
+                    return BadRequest(ServiceResult<string>.Failure("عذرآ, الرصيد غير كافي"));
+
+                var clientExists = await _context.Clients.AnyAsync(c => c.NationalId == dto.ClientId);
+                if (!clientExists)
+                    return BadRequest(ServiceResult<string>.Failure("⚠ العميل غير موجود."));
+
+                var validPartners = await _context.Partners.ToListAsync();
+                if (!validPartners.Any())
+                    return BadRequest(ServiceResult<string>.Failure("⚠ لا يوجد شركاء مؤهلين."));
+
+                using var transactionScope = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    Name = dto.Name,
-                    Cost = dto.Cost,
-                    CashPrice = dto.CashPrice,
-                    CashPaid = dto.CashPaid,
-                    TotalPrice = dto.CashPrice + ((dto.CashPrice - dto.CashPaid) * rate * dto.Duration),
-                    Duration = dto.Duration,
-                    RemainingMonths = dto.Duration,
-                    Description = dto.Description,
-                    ClientId = dto.ClientId,
-                    Date = DateTime.Now
-                };
+                    var transactions = new List<Transaction>();
+                    var PartnersOfProduct = new List<PartnerProduct>();
+                    var subTransactionsOfProduct = new List<SubTransaction>();
 
-                product.Installment = product.TotalPrice / product.Duration;
-                _context.Products.Add(product);
-                await _context.SaveChangesAsync();
-
-                var transaction = new Transaction
-                {
-                    Amount = product.Cost,
-                    ProductId = product.ID,
-                    IsDebit = false
-                };
-                transactions.Add(transaction);
-
-                for (int i = 0; i < dto.Duration; i++)
-                {
-
-                    var debitTransaction = new Transaction
+                    var product = new Product
                     {
-                        Amount = product.Installment,
+                        Name = dto.Name,
+                        Cost = dto.Cost,
+                        CashPrice = dto.CashPrice,
+                        CashPaid = dto.CashPaid,
+                        TotalPrice = dto.CashPrice + ((dto.CashPrice - dto.CashPaid) * rate * dto.Duration),
+                        Duration = dto.Duration,
+                        RemainingMonths = dto.Duration,
+                        Description = dto.Description,
+                        ClientId = dto.ClientId,
+                        Date = DateTime.Now
+                    };
+
+                    product.Installment = product.TotalPrice / product.Duration;
+                    _context.Products.Add(product);
+                    await _context.SaveChangesAsync();
+
+                    var transaction = new Transaction
+                    {
+                        Amount = product.Cost,
                         ProductId = product.ID,
-                        IsDebit = true,
-                        IsPaid = false,
-                        Date = DateTime.Now.AddMonths(i + 1)
+                        IsDebit = false
                     };
+                    transactions.Add(transaction);
 
-                    transactions.Add(debitTransaction);
-
-                }
-                _context.Transactions.AddRange(transactions);
-                await _context.SaveChangesAsync();
-
-
-                foreach (var partner in validPartners)
-                {
-                    // var percentage = Math.Round(partner.Cash / toTalCash, 4);
-                    var percentage = partner.Cash / toTalCash;
-
-                    if (partner.Cash < transaction.Amount * percentage)
-                        continue;
-
-                    var partnerProduct = new PartnerProduct
+                    // create installment transactions
+                    for (int i = 0; i < dto.Duration; i++)
                     {
-                        PartnerId = partner.NationalId,
-                        ProductId = product.ID,
-                        Percentage = percentage
-                    };
-                    PartnersOfProduct.Add(partnerProduct);
+                        transactions.Add(new Transaction
+                        {
+                            Amount = product.Installment,
+                            ProductId = product.ID,
+                            IsDebit = true,
+                            IsPaid = false,
+                            Date = DateTime.Now.AddMonths(i + 1)
+                        });
+                    }
 
-                    var subTransaction = new SubTransaction
+                    _context.Transactions.AddRange(transactions);
+                    await _context.SaveChangesAsync();
+
+                    // distribute product cost among partners
+                    foreach (var partner in validPartners)
                     {
-                        PartnerId = partner.NationalId,
-                        TransactionId = transaction.ID,
-                        Amount = transaction.Amount * percentage
-                    };
-                    subTransactionsOfProduct.Add(subTransaction);
+                        var percentage = partner.Cash / toTalCash;
+                        if (partner.Cash < transaction.Amount * percentage) continue;
 
-                    totalPercentage += percentage;
-                    totalCost += subTransaction.Amount;
+                        var partnerProduct = new PartnerProduct
+                        {
+                            PartnerId = partner.NationalId,
+                            ProductId = product.ID,
+                            Percentage = percentage
+                        };
+                        PartnersOfProduct.Add(partnerProduct);
 
-                    partner.Cash -= subTransaction.Amount;
-                    partner.WorkingCapital += subTransaction.Amount;
-                    partner.NumberOfActiveInventory++;
+                        var subTransaction = new SubTransaction
+                        {
+                            PartnerId = partner.NationalId,
+                            TransactionId = transaction.ID,
+                            Amount = transaction.Amount * percentage
+                        };
+                        subTransactionsOfProduct.Add(subTransaction);
+
+                        partner.Cash -= subTransaction.Amount;
+                        partner.WorkingCapital += subTransaction.Amount;
+                        partner.NumberOfActiveInventory++;
+                    }
+
+                    _context.PartnerProducts.AddRange(PartnersOfProduct);
+                    _context.SubTransactions.AddRange(subTransactionsOfProduct);
+                    await _context.SaveChangesAsync();
+
+                    await transactionScope.CommitAsync();
+
+                    return Ok(ServiceResult<object>.Success(new
+                    {
+                        product.ID,
+                        product.Name,
+                        product.Cost,
+                        product.CashPrice,
+                        TotalPartners = PartnersOfProduct.Count
+                    }, "✅ تم إضافة المنتج بنجاح."));
                 }
-
-                Console.WriteLine(totalPercentage);
-                Console.WriteLine(totalCost);
-
-                _context.PartnerProducts.AddRange(PartnersOfProduct);
-                _context.SubTransactions.AddRange(subTransactionsOfProduct);
-                await _context.SaveChangesAsync();
-
-                await transactionScope.CommitAsync();
-
-                return CreatedAtAction(nameof(GetProductById), new { productId = product.ID }, new
+                catch (Exception ex)
                 {
-                    product.ID,
-                    product.Name,
-                    product.Cost,
-                    product.CashPrice,
-                    TotalPartners = PartnersOfProduct.Count
-                });
+                    await transactionScope.RollbackAsync();
+                    return StatusCode(500,
+                        ServiceResult<string>.Failure($"⚠ خطأ أثناء إضافة المنتج. {ex.Message}"));
+                }
             }
             catch (Exception ex)
             {
-                await transactionScope.RollbackAsync();
-                return StatusCode(500, new { message = "⚠ حدث خطأ أثناء إضافة المنتج.", error = ex.Message });
+                return StatusCode(500, ServiceResult<string>.Failure($"⚠ خطأ غير متوقع: {ex.Message}"));
             }
-
         }
 
+        // ✅ Pay Installment
         [HttpPost("payment/{id}")]
         public async Task<IActionResult> PaymentOfInstallment([FromRoute] int id)
         {
-
- 
-            if (id == null || id <= 0)
-                return BadRequest(new { message = "Invalid transaction id." });
+            if (id <= 0)
+                return BadRequest(ServiceResult<string>.Failure("❌ معرف العملية غير صالح."));
 
             using var transactionScope = await _context.Database.BeginTransactionAsync();
 
             try
             {
-                var transaction = await _context.Transactions
-                    .FirstOrDefaultAsync(t => t.ID == id);
-
+                var transaction = await _context.Transactions.FirstOrDefaultAsync(t => t.ID == id);
                 if (transaction == null)
-                    return NotFound(new { message = "Transaction not found." });
+                    return NotFound(ServiceResult<string>.Failure("⚠ العملية غير موجودة."));
 
                 if (transaction.IsPaid)
-                    return BadRequest(new { message = "This installment is already paid." });
+                    return BadRequest(ServiceResult<string>.Failure("❌ هذه القسط مدفوع بالفعل."));
 
-                var product = await _context.Products
-                    .FirstOrDefaultAsync(p => p.ID == transaction.ProductId);
-
+                var product = await _context.Products.FirstOrDefaultAsync(p => p.ID == transaction.ProductId);
                 if (product == null)
-                    return NotFound(new { message = "Related product not found." });
+                    return NotFound(ServiceResult<string>.Failure("⚠ المنتج المرتبط غير موجود."));
 
                 var partnersOfProduct = await _context.PartnerProducts
                     .Where(p => p.ProductId == transaction.ProductId)
                     .ToListAsync();
 
                 if (!partnersOfProduct.Any())
-                    return BadRequest(new { message = "No partners found for this product." });
+                    return BadRequest(ServiceResult<string>.Failure("⚠ لا يوجد شركاء لهذا المنتج."));
 
                 var partnerIds = partnersOfProduct.Select(pp => pp.PartnerId).ToList();
-
                 var partnersThemSelves = await _context.Partners
                     .Where(p => partnerIds.Contains(p.NationalId))
                     .ToListAsync();
 
-                if (partnersThemSelves.Count != partnerIds.Count)
-                    return BadRequest(new { message = "Some partners are missing in the database." });
-
                 var subTransactions = new List<SubTransaction>();
 
-                //  Mark main transaction as paid
                 transaction.IsPaid = true;
 
                 foreach (var partner in partnersOfProduct)
@@ -223,78 +198,162 @@ namespace Super_Sonic.Controllers
                         TransactionId = transaction.ID,
                         Amount = transaction.Amount * partner.Percentage
                     };
-
-             
-
                     subTransactions.Add(subTransaction);
 
-                    var partnerThemSelf = partnersThemSelves
-                        .FirstOrDefault(p => p.NationalId == partner.PartnerId);
+                    var partnerEntity = partnersThemSelves.FirstOrDefault(p => p.NationalId == partner.PartnerId);
+                    if (partnerEntity == null) continue;
 
-                    if (partnerThemSelf == null)
-                        continue; // ✅ extra safety, skip missing partner
-
-                    //  Financial calculations
                     var principalAmountFromInstallment = product.CashPrice / product.Duration;
-                    var interestFromInstallment = product.Installment - principalAmountFromInstallment;
-
                     var partnerPrincipalAmount = principalAmountFromInstallment * partner.Percentage;
-                    var partnerInterestAmount = subTransaction.Amount - partnerPrincipalAmount;
 
-                    // Update partner balances
-                    partnerThemSelf.Cash += subTransaction.Amount;
-                    partnerThemSelf.Capital += partnerInterestAmount;
-                    partnerThemSelf.WorkingCapital -= partnerPrincipalAmount;
-                    //////////////////////////////////////////////////////////////////////
-
-
-
+                    partnerEntity.Cash += subTransaction.Amount;
+                    partnerEntity.Capital += subTransaction.Amount - partnerPrincipalAmount;
+                    partnerEntity.WorkingCapital -= partnerPrincipalAmount;
                 }
-                await _context.SubTransactions.AddRangeAsync(subTransactions);
 
+                await _context.SubTransactions.AddRangeAsync(subTransactions);
                 await _context.SaveChangesAsync();
                 await transactionScope.CommitAsync();
 
-                return Ok(new
+                return Ok(ServiceResult<object>.Success(new
                 {
-                    message = "Installment payment processed successfully.",
                     transactionId = transaction.ID,
                     productId = product.ID,
                     totalSubTransactions = subTransactions.Count
-                });
+                }, "✅ تم دفع القسط بنجاح."));
             }
             catch (Exception ex)
             {
                 await transactionScope.RollbackAsync();
-                // log ex here with ILogger
-                return StatusCode(500, new { message = "An error occurred while processing the installment.", error = ex.Message });
+                return StatusCode(500,
+                    ServiceResult<string>.Failure($"⚠ خطأ أثناء معالجة القسط. {ex.Message}"));
             }
         }
 
-
-        //            {
-        //                "name": "Iphone 17 pro max",
-        //  "cost": 100000,
-        //  "cashPrice": 120000,
-        //  "cashPaid": 20000,
-        //  "duration": 12,
-        //  "description": "This is my first product add test",
-        //  "clientId": "3030"
-        //}
-
-        // Optional GET by Id for CreatedAtAction
-
-        [HttpGet("{productId}")]
-        public async Task<IActionResult> GetProductById(int id)
+        // ✅ Get All Products
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
         {
-            var product = await _context.Products.FindAsync(id);
-            if (product == null)
-                return NotFound();
-            return Ok(product);
+            try
+            {
+                var products = await _context.Products
+                    .Include(p => p.Client)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                if (!products.Any())
+                    return NotFound(ServiceResult<List<Product>>.Failure("⚠ لا يوجد منتجات."));
+
+                return Ok(ServiceResult<List<Product>>.Success(products, "✅ تم جلب المنتجات."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ServiceResult<string>.Failure($"⚠ خطأ أثناء جلب المنتجات. {ex.Message}"));
+            }
+        }
+
+        // ✅ Get Product by Id
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            try
+            {
+                var product = await _context.Products
+                    .Include(p => p.Client)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.ID == id);
+
+                if (product == null)
+                    return NotFound(ServiceResult<string>.Failure("⚠ المنتج غير موجود."));
+
+                return Ok(ServiceResult<Product>.Success(product, "✅ تم جلب المنتج."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ServiceResult<string>.Failure($"⚠ خطأ أثناء جلب المنتج. {ex.Message}"));
+            }
+        }
+
+        // ✅ Update Product
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] Product dto)
+        {
+            if (id != dto.ID)
+                return BadRequest(ServiceResult<string>.Failure("❌ المعرف لا يطابق المنتج."));
+
+            try
+            {
+                var product = await _context.Products.FindAsync(id);
+                if (product == null)
+                    return NotFound(ServiceResult<string>.Failure("⚠ المنتج غير موجود."));
+
+                product.Name = dto.Name;
+                product.Cost = dto.Cost;
+                product.CashPrice = dto.CashPrice;
+                product.CashPaid = dto.CashPaid;
+                product.TotalPrice = dto.TotalPrice;
+                product.Duration = dto.Duration;
+                product.Installment = dto.Installment;
+                product.RemainingMonths = dto.RemainingMonths;
+                product.Description = dto.Description;
+                product.ClientId = dto.ClientId;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(ServiceResult<Product>.Success(product, "✅ تم تحديث المنتج بنجاح."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ServiceResult<string>.Failure($"⚠ خطأ أثناء تحديث المنتج. {ex.Message}"));
+            }
+        }
+
+        // ✅ Delete Product
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                var product = await _context.Products.FindAsync(id);
+                if (product == null)
+                    return NotFound(ServiceResult<string>.Failure("⚠ المنتج غير موجود."));
+
+                _context.Products.Remove(product);
+                await _context.SaveChangesAsync();
+
+                return Ok(ServiceResult<string>.Success("✅ تم حذف المنتج بنجاح."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ServiceResult<string>.Failure($"⚠ خطأ أثناء حذف المنتج. {ex.Message}"));
+            }
+        }
+
+        // ✅ Get Products by Partner
+        [HttpGet("partner/{partnerId}")]
+        public async Task<IActionResult> GetProductsByPartner(string partnerId)
+        {
+            try
+            {
+                var products = await _context.PartnerProducts
+                    .Where(pp => pp.PartnerId == partnerId)
+                    .Include(pp => pp.Product)
+                    .Select(pp => pp.Product)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                if (!products.Any())
+                    return NotFound(ServiceResult<List<Product>>.Failure("⚠ لا يوجد منتجات مرتبطة بهذا الشريك."));
+
+                return Ok(ServiceResult<List<Product>>.Success(products, "✅ تم جلب منتجات الشريك."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ServiceResult<string>.Failure($"⚠ خطأ أثناء جلب منتجات الشريك. {ex.Message}"));
+            }
         }
     }
 }
-
 
 
 

@@ -116,6 +116,18 @@ namespace Super_Sonic
             //    app.UseSwaggerUI();
             //}
 
+
+
+            // Register CORS
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()   // or use WithOrigins("https://yourfrontend.com")
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+            });
             // Always enable Swagger for testing (optional: restrict to development)
             app.UseSwagger();
             app.UseSwaggerUI();
@@ -123,6 +135,8 @@ namespace Super_Sonic
             app.UseAuthentication();
             app.UseAuthorization();
 
+            // Enable CORS
+            app.UseCors("AllowAll");
             app.MapControllers();
 
             app.Run();
