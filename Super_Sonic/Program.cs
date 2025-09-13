@@ -23,7 +23,7 @@ namespace Super_Sonic
 
             // Register Swagger services
             builder.Services.AddEndpointsApiExplorer();
-           // builder.Services.AddSwaggerGen();
+            // builder.Services.AddSwaggerGen();
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "My API", Version = "v1" });
@@ -57,8 +57,8 @@ namespace Super_Sonic
 
 
             builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Super_Sonic"))
-);
+                options.UseSqlServer(builder.Configuration.GetConnectionString("Super_Sonic"))
+            );
 
             builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
             {
@@ -93,7 +93,7 @@ namespace Super_Sonic
 
             //    };
             //});      
-            
+
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -109,7 +109,7 @@ namespace Super_Sonic
                 {
                     ValidateIssuer = true,
                     ValidIssuer = Configuration["JWT:ValidIssuer"],
-                    ValidateAudience = false,                
+                    ValidateAudience = false,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["JWT:SecretKey"]))
 
                 };
@@ -125,8 +125,10 @@ namespace Super_Sonic
             //    var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
             //    builder.WebHost.UseUrls($"http://*:{port}");
             //}
-            //var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-            //builder.WebHost.UseUrls($"http://*:{port}");
+
+            var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
+            builder.WebHost.UseUrls($"http://*:{port}");
+
 
 
             // Register CORS
@@ -140,14 +142,14 @@ namespace Super_Sonic
                 });
             });
 
-            var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
-            //if (app.Environment.IsDevelopment())
-            //{
-            //    app.UseSwagger();
-            //    app.UseSwaggerUI();
-            //}
+            //Instead of AllowAnyOrigin, you can specify only your frontend:
+
+            //policy.WithOrigins("https://yourfrontend.com", "http://localhost:3000")
+            //      .AllowAnyMethod()
+            //      .AllowAnyHeader();
+
+            var app = builder.Build();
 
 
 
