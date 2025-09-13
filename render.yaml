@@ -1,7 +1,7 @@
 services:
   - type: web
-    name: Super_Sonic        # must match existing service name
+    name: Super_Sonic
     runtime: docker
-    repo: https://github.com/BadrAhmed185/Super_Sonic.git
-    rootDir: Super_Sonic    # optional if your service code is in a subdir
-    # optional: dockerCommand: "/bin/bash -c 'migrate && ./start'"
+    repo: https://github.com/your/repo
+    rootDir: .
+    dockerfilePath: Dockerfile
